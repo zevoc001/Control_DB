@@ -1,5 +1,0 @@
-DB_NAME = test
-DB_USER = postgres
-DB_PASSWORD = h56t11m6l2
-DB_HOST = 89.111.172.101
-DB_PORT = 5432

@@ -1,4 +1,4 @@
-from DataBase import DataBase
+from database import DataBase
 
 def get_user(id: int): # Получить данные пользователя
     pass

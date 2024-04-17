@@ -1,10 +1,9 @@
-from DataBase import DataBase
+from database import DataBase
 import os
-import psycopg2 as pg
 import unittest
 from dotenv import load_dotenv
 
-load_dotenv('conf.env')
+load_dotenv('.env')
 
 class DataBaseTest(unittest.TestCase):
     def setUp(self):
@@ -22,6 +21,12 @@ class DataBaseTest(unittest.TestCase):
 
     def test_connecting_table(self):
         self.table = self.db.connect_table('test_users_data')
+
+    def test_get_user(self):
+        self.table = self.db.connect_table('users_data')
+        user = self.table.get_user(1)
+        print(user)
+        self.assertTrue(user)
     
     def test_drop_table(self):
         self.db.drop_table('test_users_data')

@@ -1,4 +1,7 @@
+from typing import Dict, Any
+from datetime import date
 import psycopg2 as pg
+from psycopg2.extras import DictCursor
 from config import DB_NAME, DB_PORT, DB_USER, DB_HOST, DB_PASSWORD
 
 
@@ -106,17 +109,38 @@ class Table(): # Таблица данных пользователей
         self.conn = db.conn
         self.table_name = table_name
 
-    def get_user(self, user_id: int) -> list:
+    def get_by_id(self, id: int) -> list:
         """
         Выполняет выборку данных из таблицы. Может использоваться для выборки всех записей или записей, удовлетворяющих условию where.
         """
-        select_query = f"SELECT * FROM {self.table_name} WHERE id=5"
-        with self.conn.cursor() as cursor:
-            cursor.execute(select_query, (user_id,))
+        select_query = f'SELECT * FROM {self.table_name} WHERE "id" = CAST(%s AS INTEGER);'
+        with self.conn.cursor(cursor_factory=DictCursor) as cursor:
+            cursor.execute(select_query, (id,))
             records = cursor.fetchall()
-            return records  # Возвращается список кортежей
+            records_dict = [dict(record) for record in records]
+            return records_dict  # Возвращается список кортежей
 
-    def insert(self, **kwargs) -> bool: # Добавление нового кортежа
+    def get_by_param(self, param: str, value: str|int) -> list:
+        """
+        Выполняет выборку данных из таблицы. Может использоваться для выборки всех записей или записей, удовлетворяющих условию where.
+        """
+        if type(value) == str:
+            select_query = f'SELECT * FROM {self.table_name} WHERE "{param}" = CAST(%s AS VARCHAR)'
+        else:
+            select_query = f'SELECT * FROM {self.table_name} WHERE "{param}" = CAST(%s AS INTEGER)'
+        with self.conn.cursor(cursor_factory=DictCursor) as cursor:
+            cursor.execute(select_query, (value,))
+            records = cursor.fetchall()
+            try:
+                user = [dict(record) for record in records]
+                user['data_reg'] = user['data_reg'].strftime("%Y-%m-%d")
+                user['born'] = user['born'].strftime("%Y-%m-%d")
+                return records  # Возвращается список кортежей
+            except IndexError:
+                return []
+
+
+    def insert(self, **kwargs): # Добавление нового кортежа
         '''
         Добавляет новую запись в таблицу. Аргументы передаются в виде именованных параметров, где ключи соответствуют именам столбцов.
         Данные передаются следующим образом:
@@ -130,57 +154,62 @@ class Table(): # Таблица данных пользователей
             with self.conn.cursor() as cursor:
                 cursor.execute(insert_query, values)
                 self.conn.commit()
+                return True
         except Exception as e:
             self.conn.rollback()
-            raise pg.Error
+            raise e
+            return False
 
-    def delete(self, where) -> bool: # Удаление кортежа
+    def delete_by_id(self, id: int): # Удаление кортежа
         '''
         Удаляет записи из таблицы, удовлетворяющие условию where.
         where: строка условия для удаления (например, "id = 4")
         '''
-        delete_query = f"DELETE FROM {self.table_name} WHERE {where}"
+        delete_query = f"DELETE FROM {self.table_name} WHERE id = CAST(%s AS INTEGER)"
 
         try:
             with self.conn.cursor() as cursor:
-                cursor.execute(delete_query)
+                cursor.execute(delete_query, (id, ))
                 self.conn.commit()
+                return True
         except Exception as e:
             self.conn.rollback()
-            raise pg.Error
+            return False
 
-    def update(self, set_clause, where=None) -> bool: # Обновление кортежа
+    def delete_by_param(self, param: str, value: int|str):
         '''
-        Обновляет записи в таблице. Позволяет изменить значения в столбцах записей, удовлетворяющих условию where.
-
-        set_clause: строка с описанием обновляемых значений (например, "name = 'John', age = 30").
-        where: условие для обновления. Если не указано, обновляются все записи в таблице.
+        Удаляет записи из таблицы, удовлетворяющие условию where.
+        where: строка условия для удаления (например, "id = 4")
         '''
-        update_query = f"UPDATE {self.table_name} SET {set_clause}" 
-        if where:
-            update_query += f" WHERE {where}"
+        if type(value) == int:
+            delete_query = f"DELETE FROM {self.table_name} WHERE {param} = CAST(%s AS INTEGER)"
+        else:
+            delete_query = f"DELETE FROM {self.table_name} WHERE {param} = CAST(%s AS VARCHAR)"
         try:
             with self.conn.cursor() as cursor:
-                cursor.execute(update_query)
+                cursor.execute(delete_query, (value, ))
                 self.conn.commit()
+                return True
         except Exception as e:
             self.conn.rollback()
-            raise pg.Error
+            return False
 
-    def update_record(self, table_name, record_id, column_name, new_value):
+    def update_record(self, id: int, column_name: str, new_value: int|str):
         """
         Обновляет один параметр записи в указанной таблице.
 
-        table_name: имя таблицы, в которой нужно обновить запись.
-        record_id: идентификатор записи, которую нужно обновить.
+        id: идентификатор записи, которую нужно обновить.
         column_name: название столбца, значение которого нужно обновить.
         new_value: новое значение для указанного столбца.
+        Если запись нет возвращается True
+        Если значение неверное возвращается True
         """
-        query = "UPDATE {table_name} SET {column_name} = %s WHERE id = %s".format(table_name, column_name)
+        query = f"UPDATE {self.table_name} SET {column_name} = %s WHERE id = %s"
         try:
             with self.conn.cursor() as cursor:
-                cursor.execute(query, (new_value, record_id))
+                cursor.execute(query, (new_value, id))
                 self.conn.commit()
+                return True
         except Exception as e:
             self.conn.rollback()
-            raise pg.Error
+            return False

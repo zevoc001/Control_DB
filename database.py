@@ -190,22 +190,27 @@ class Table():  # Таблица данных пользователей
             self.conn.rollback()
             return False
 
-    def update_record(self, id: int, column_name: str, new_value: int | str):
+    def update_record(self, id: int, updates: dict) -> bool:
         """
-        Обновляет один параметр записи в указанной таблице.
+        Обновляет параметры записи в указанной таблице.
 
         id: идентификатор записи, которую нужно обновить.
-        column_name: название столбца, значение которого нужно обновить.
-        new_value: новое значение для указанного столбца.
-        Если запись нет возвращается True
-        Если значение неверное возвращается True
+        updates: словарь с ключами, соответствующими названиям столбцов, и значениями, которые нужно установить.
+
+        Возвращает True, если обновление успешно, иначе False.
         """
-        query = f"UPDATE {self.table_name} SET {column_name} = %s WHERE id = %s"
+        # Собираем части запроса для каждого ключа в словаре updates
+        set_clause = ', '.join([f"{key} = %s" for key in updates.keys()])
+        values = list(updates.values())
+        values.append(id)  # добавляем id в конец списка параметров
+
+        query = f"UPDATE {self.table_name} SET {set_clause} WHERE id = %s"
         try:
             with self.conn.cursor() as cursor:
-                cursor.execute(query, (new_value, id))
+                cursor.execute(query, values)
                 self.conn.commit()
                 return True
         except Exception as e:
             self.conn.rollback()
             return False
+

@@ -80,25 +80,32 @@ class UserAdd(BaseModel):
     other_info: str | None
 
 
-@app.get('/users/get_user', response_model=UserInfo)
-async def get_user(id: int):
+@app.get('/users/get_user_by_id')
+async def get_user_id(id: int):
     usr_table = db.connect_table('users')
-    users = usr_table.get_by_id(id)[0]
-    print(users)
-    if users:
-        user = users[0]
-        user['data_reg'] = user['data_reg'].strftime("%Y-%m-%d")
-        user['born'] = user['born'].strftime("%Y-%m-%d")
-        return user
-    else:
-        return [id] + [None] * 31
+    user = usr_table.get_by_id(id)
+    return user
 
+@app.get('/users/get_user_by_telegram')
+async def get_user_telegram(telegram_id: str):
+    usr_table = db.connect_table('users')
+    user = usr_table.get_by_param(param='telegram_id', value=telegram_id)
+    return user
 
 @app.post('/users/add_user')
 async def add_user(user: UserAdd):
     usr_table = db.connect_table('users')
     user_dict = user.dict()
-    user_dict['data_reg'] = user_dict['data_reg'].isoformat()
     usr_table.insert(**user_dict)
     user_info = usr_table.get_by_param(param='telegram_id', value=user_dict['telegram_id'])
     return user_info
+
+@app.post('/users/update_info')
+def update_user(user: UserInfo):
+    usr_table = db.connect_table('users')
+    user_dict = user.dict()
+    usr_table.update_record(user_dict['id'], user_dict)
+    user_info = usr_table.get_by_id(user_dict['id'])
+    return user_info
+
+

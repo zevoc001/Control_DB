@@ -102,22 +102,22 @@ class DataBaseTest(unittest.TestCase):
 
     def test_update_record(self):
         self.table = self.db.connect_table('users')
-        result = self.table.update_record(id=1, column_name='status', new_value='Test')
+        result = self.table.update_record(id=1, updates={'status': 'test'})
         self.assertTrue(result)
 
     def test_update_record_wrong_id(self):
         self.table = self.db.connect_table('users')
-        result = self.table.update_record(id=0, column_name='status', new_value='Test')
+        result = self.table.update_record(id=0, updates={'status': 'test'})
         self.assertTrue(result)
 
     def test_update_record_wrong_column(self):
         self.table = self.db.connect_table('users')
-        result = self.table.update_record(id=1, column_name='sta', new_value='Test')
+        result = self.table.update_record(id=1, updates={'error': 'test'})
         self.assertFalse(result)
 
     def test_update_record_wrong_value(self):
         self.table = self.db.connect_table('users')
-        result = self.table.update_record(id=1, column_name='status', new_value=99)
+        result = self.table.update_record(id=1, updates={'status': 99})
         self.assertTrue(result)
     
     def test_drop_table(self):

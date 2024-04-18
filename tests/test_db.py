@@ -26,6 +26,11 @@ class DataBaseTest(unittest.TestCase):
         result = self.table.insert(name = 'John')
         self.assertTrue(result)
 
+    def test_get_users_all(self):
+        self.table = self.db.connect_table('users')
+        result = self.table.get_all()
+        self.assertTrue(result)
+
     def test_get_by_id_not_empty(self):
         self.table = self.db.connect_table('users')
         user = self.table.get_by_id(1)
@@ -67,7 +72,7 @@ class DataBaseTest(unittest.TestCase):
 
     def test_get_by_param_str(self):
         self.table = self.db.connect_table('users')
-        user = self.table.get_by_param(param='name', value='Бойко Иван Анатольевич')
+        user = self.table.get_by_param(param='name', value='Test')
         self.assertTrue(user)
 
     def test_get_by_param_str_wrong(self):

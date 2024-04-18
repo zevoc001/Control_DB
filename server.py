@@ -79,6 +79,11 @@ class UserAdd(BaseModel):
     is_military: bool | None
     other_info: str | None
 
+@app.get('/users/get_users_all')
+async def get_user_id():
+    usr_table = db.connect_table('users')
+    users = usr_table.get_all()
+    return users
 
 @app.get('/users/get_user_by_id')
 async def get_user_id(id: int):

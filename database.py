@@ -126,15 +126,19 @@ class Table():  # Таблица данных пользователей
         with self.conn.cursor(cursor_factory=DictCursor) as cursor:
             cursor.execute(select_query, (value,))
             records = cursor.fetchall()
-            records_list = [dict(record) for record in records]
+        records_list = [dict(record) for record in records]
+        return records_list
 
-        if records_list:  # Если список не пуст
-            # Обрабатываем поля и приводим либо к строке, либо к числу
-            for record in records_list:
-                for key, value in record.items():
-                    if type(value) == datetime.date:
-                        record[key] = value.strftime("%Y-%m-%d")
-            return records_list  # Возвращается список кортежей
+    def get_all(self) -> list:
+        """
+        Выполняет выборку данных из таблицы. Может использоваться для выборки всех записей или записей.
+        """
+        select_query = f'SELECT * FROM {self.table_name}'
+        with self.conn.cursor(cursor_factory=DictCursor) as cursor:
+            cursor.execute(select_query)
+            records = cursor.fetchall()
+        records_list = [dict(record) for record in records]
+        return records_list  # Возвращается список кортежей
 
     def insert(self, **kwargs):  # Добавление нового кортежа
         """

@@ -10,39 +10,41 @@ app = FastAPI(
 db = DataBase(DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT)
 db.connect_db()
 
+
 class UserInfo(BaseModel):
     id: int
     telegram_id: str
-    access: str|None
-    data_reg: date|None
-    status: str|None
-    rating: int|None
-    profit: int|None
-    offers: int|None
-    comment: str|None
-    name: str|None
-    sex: str|None
-    born: date|None
-    age: int|None
-    residence: str|None
-    education: str|None
-    course: int|None
-    profession: str|None
-    salary: int|None
-    hard_work: bool|None
-    mid_work: bool|None
-    art_work: bool|None
-    other_work: str|None
-    tools: str|None
-    language: str|None
-    phone: str|None
-    email: str|None
-    citizenship: str|None
-    wallet: str|None
-    is_driver: bool|None
-    transport: str|None
-    is_military: bool|None
-    other_info: str|None
+    access: str | None
+    data_reg: date | None
+    status: str | None
+    rating: int | None
+    profit: int | None
+    offers: int | None
+    comment: str | None
+    name: str | None
+    sex: str | None
+    born: date | None
+    age: int | None
+    residence: str | None
+    education: str | None
+    course: int | None
+    profession: str | None
+    salary: int | None
+    hard_work: bool | None
+    mid_work: bool | None
+    art_work: bool | None
+    other_work: str | None
+    tools: str | None
+    language: str | None
+    phone: str | None
+    email: str | None
+    citizenship: str | None
+    wallet: str | None
+    is_driver: bool | None
+    transport: str | None
+    is_military: bool | None
+    other_info: str | None
+
 
 class UserAdd(BaseModel):
     telegram_id: str
@@ -77,6 +79,7 @@ class UserAdd(BaseModel):
     is_military: bool | None
     other_info: str | None
 
+
 @app.get('/users/get_user', response_model=UserInfo)
 async def get_user(id: int):
     usr_table = db.connect_table('users')
@@ -88,7 +91,8 @@ async def get_user(id: int):
         user['born'] = user['born'].strftime("%Y-%m-%d")
         return user
     else:
-        return [id] + [None]*31
+        return [id] + [None] * 31
+
 
 @app.post('/users/add_user')
 async def add_user(user: UserAdd):

@@ -1,17 +1,16 @@
 from database import DataBase
 import os
 import unittest
-from dotenv import load_dotenv
 
-load_dotenv('../.env')
+from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 
 class DataBaseTest(unittest.TestCase):
     def setUp(self):
-        self.db_name= os.getenv('DB_NAME')
-        user = os.getenv('DB_USER')
-        password = os.getenv('DB_PASSWORD')
-        host= os.getenv('DB_HOST')
-        port = os.getenv('DB_PORT')
+        self.db_name= DB_NAME
+        user = DB_USER
+        password = DB_PASSWORD
+        host= DB_HOST
+        port = DB_PORT
         self.db = DataBase(self.db_name, user, password, host, port)
         self.conn = self.db.connect_db()
         self.assertIsNotNone(self.conn)
@@ -27,20 +26,44 @@ class DataBaseTest(unittest.TestCase):
         result = self.table.insert(name = 'John')
         self.assertTrue(result)
 
-    def test_get_by_id(self):
+    def test_get_by_id_not_empty(self):
         self.table = self.db.connect_table('users')
         user = self.table.get_by_id(1)
         self.assertTrue(user)
 
+    def test_get_by_id_empty(self):
+        self.table = self.db.connect_table('users')
+        user = self.table.get_by_id(0)
+        self.assertFalse(user)
+
+    def test_get_by_id_type(self):
+        self.table = self.db.connect_table('users')
+        record = self.table.get_by_id(1)
+        for key, value in record.items():
+            if value == str or int:
+                continue
+            else:
+                self.fail()
+
+    def test_get_by_param_type(self):
+        self.table = self.db.connect_table('users')
+        response = self.table.get_by_param(param='id', value=1)
+        for record in response:
+            for key, value in record.items():
+                if value == str or int:
+                    continue
+                else:
+                    self.fail()
+
     def test_get_by_param_int(self):
         self.table = self.db.connect_table('users')
-        user = self.table.get_by_param(param='telegram_id', value='1383046637')
-        self.assertTrue(user)
+        response = self.table.get_by_param(param='id', value=1)
+        self.assertTrue(response)
 
     def test_get_by_param_int_wrong(self):
         self.table = self.db.connect_table('users')
-        user = self.table.get_by_param(param='telegram_id', value='0')
-        self.assertFalse(user)
+        response = self.table.get_by_param(param='id', value=-5)
+        self.assertFalse(response)
 
     def test_get_by_param_str(self):
         self.table = self.db.connect_table('users')

@@ -1,5 +1,4 @@
 from database import DataBase
-import os
 import unittest
 from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_TABLE
 
@@ -23,7 +22,7 @@ class DataBaseTest(unittest.TestCase):
 
     def test_insert(self):
         self.table = self.db.connect_table(DB_TABLE)
-        result = self.table.insert(name='John')
+        result = self.table.insert(name='Test')
         self.assertTrue(result)
 
     def test_get_users_all(self):
@@ -130,6 +129,8 @@ class DataBaseTest(unittest.TestCase):
         self.table = self.db.connect_table('test_users_data')
 
     def tearDown(self):
+        self.table = self.db.connect_table(DB_TABLE)
+        self.table.delete_by_param(param='name', value='Test')
         self.db.disconnect()
         status = self.db.status
         self.assertFalse(status)

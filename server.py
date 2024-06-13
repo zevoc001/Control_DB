@@ -1,12 +1,10 @@
-from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
 from database import DataBase
 from datetime import date, time
-from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, ACCESS_TOKEN, PHOTO_PATH
-import os
-import shutil
+from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, ACCESS_TOKEN
+
 
 app = FastAPI(
     title='MBT DataBase'
@@ -296,25 +294,3 @@ async def finish_order(order_id: int, token: str = Depends(verify_token)):
         return {'status': 'Success'}
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-
-@app.get('/api/photo/{file_name}')
-async def get_photo(file_name: str, token: str = Depends(verify_token)):
-    try:
-        file_location = os.path.join(PHOTO_PATH, file_name)
-        return FileResponse(path=file_location, media_type='image/jpeg', filename=file_name)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@app.post('/api/photo/')
-async def upload_photo(photo: UploadFile = File(...),  token: str = Depends(verify_token)):
-    if not os.path.exists(PHOTO_PATH):
-        os.makedirs(PHOTO_PATH)
-    try:
-        file_location = os.path.join(PHOTO_PATH, photo.filename)
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(photo.file, buffer)
-        return {"filename": photo.filename}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

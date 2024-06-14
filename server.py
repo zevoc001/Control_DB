@@ -95,6 +95,7 @@ class EmployerInfo(BaseModel):
 
 async def verify_token(request: Request):
     pass
+
     headers = request.headers
     access_token = headers.get('Authorization')
     if access_token is None:

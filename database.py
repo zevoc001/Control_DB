@@ -1,6 +1,21 @@
-import datetime
-import psycopg2 as pg
+import psycopg2
+from datetime import date
 from psycopg2.extras import DictCursor
+from psycopg2.errors import UniqueViolation, ConnectionException
+
+
+class RecordNotFound(Exception):
+    def __init__(self, *args):
+        if args:
+            self.message = args[0]
+        else:
+            self.message = None
+
+    def __str__(self):
+        if self.message:
+            return f'RecordNotFound, {self.message}'
+        else:
+            return 'RecordNotFound'
 
 
 class DataBase:
@@ -48,245 +63,251 @@ class DataBase:
         self.password = password
         self.host = host
         self.port = port
-        self.status = False
+        self.connection = psycopg2.connect(database=db_name, user=user, password=password, host=host, port=port,
+                                           cursor_factory=DictCursor)
+        self.cursor = self.connection.cursor()
 
-    def connect_db(self) -> object:  # Подключение к БД PostgreeSQL
+    def get_by_id(self, table_name: str, id: int) -> dict:
         """
-        Подключается к базе данных PostgreSQL. В случае успешного подключения возвращает объект conn для выполнения операций с базой данных.
-        В случае неудачи выбрасывает исключение ConnectionError.
-        """
-        conn_string = "dbname='{0}' user='{1}' password='{2}' host='{3}' port='{4}'".format(self.db_name, self.user,
-                                                                                            self.password, self.host,
-                                                                                            self.port)  # Строка запроса
-        self.conn = pg.connect(conn_string)
-        self.status = True
-        if self.status:
-            return self.conn
-        else:
-            raise ConnectionError
+        Выполняет выборку данных из таблицы.
+        Если найдено несколько записей с указанным id, то возвращает первую найденную.
+        Args:
+            table_name: название таблицы
+            id: уникальный номер записи
 
-    def connect_table(self, table_name: str):
+        Returns:
+            Возвращает словарь с данными в их типе.
+            Если запись не найдена возвращает ошибку RecordNotFound.
         """
 
-        Подключает к таблице БД. В качестве аргумента принимает название таблицы.
-        Перед подключением к таблице необходимо подключиться к БД
-        Возвращает объект Table.
-        """
-        table = Table(self, table_name)
-        return table
-
-    def create_table(self, table_name: str, table_schema: str):
-        """
-        Создаёт и возвращает объект класса Table, связанный с указанной таблицей в базе данных. Этот метод позволяет работать с таблицами через высокоуровневый интерфейс.
-
-        table_name: название таблицы в базе данных.
-        create_table(table_name: str, table_schema: str)
-        Создаёт новую таблицу в базе данных с указанной схемой. Если таблица с таким именем уже существует, действие не выполняется.
-
-        Схема пишется в стиле SQL описания таблицы, например:
-        'id SERIAL PRIMARY KEY, name VARCHAR(100), age INT'.
-        """
-        with self.conn.cursor() as cursor:
-            cursor.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({table_schema})")
-            self.conn.commit()
-
-    def drop_table(self, table_name: str):
-        """
-        Удаляет таблицу из базы данных. Если таблица не существует, операция игнорируется.
-        table_name: название удаляемой таблицы.
-        В случае ошибки возвращает pg.Error
-        """
+        select_query = f'SELECT * FROM "{table_name}" WHERE "id" = %s;'
         try:
-            with self.conn.cursor() as cursor:
-                cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
-                self.conn.commit()
-        except:
-            self.conn.rollback()
-            raise pg.Error
-
-    def disconnect(self):
-        """
-        Отключает текущее соединение с базой данных и освобождает ресурсы.
-        После вызова этого метода дальнейшее взаимодействие с базой данных через текущий экземпляр класса DataBase становится невозможным.
-        """
-        self.conn.close()
-        self.status = False
-
-
-class Table():  # Таблица данных пользователей
-    """
-    Класс Table предназначен для взаимодействия с конкретной таблицей в базе данных PostgreSQL.
-    Он предоставляет методы для выполнения основных операций с данными: выборка (SELECT), вставка (INSERT), удаление (DELETE) и обновление (UPDATE) записей.
-    """
-
-    def __init__(self, db, table_name):
-        self.db_name = db.db_name
-        self.conn = db.conn
-        self.table_name = table_name
-
-    def get_by_id(self, id: int) -> dict:
-        """
-        Выполняет выборку данных из таблицы. Может использоваться для выборки всех записей или записей, удовлетворяющих условию where.
-        Возвращает данные в их типе.
-        """
-        select_query = f'SELECT * FROM {self.table_name} WHERE "id" = %s;'
-        with self.conn.cursor(cursor_factory=DictCursor) as cursor:
-            cursor.execute(select_query, (id,))
-            records = cursor.fetchall()
+            self.cursor.execute(select_query, (id,))
+            records = self.cursor.fetchall()
+            self.connection.commit()
             records_list = [dict(record) for record in records]
             if records_list:
                 record = records_list[0]
                 return record
             else:
-                return {}
+                raise RecordNotFound()
+        except Exception as e:
+            self.connection.rollback()
+            raise e
 
-    def get_by_param(self, param: str, value: str | int) -> list:
+    def get_by_param(self, table_name: str, param: str, value: str | int) -> list[dict]:
         """
-        Выполняет выборку данных из таблицы. Может использоваться для выборки всех записей или записей.
+        Выполняет выборку записей из таблицы на основе значения столбца.
+        В качестве условия поиска использует название столбца (param) и его значение (числовое или строковое)
+        Args:
+            table_name: название таблицы
+            param: наименование столбца
+            value: значение столбца
+
+        Returns:
+        Возвращает список с найденными записями d виде словаря в их типе.
+        Если записей нет, то возвращает пустой список
         """
+
         if type(value) == str:
-            select_query = f'SELECT * FROM {self.table_name} WHERE "{param}" = CAST(%s AS VARCHAR)'
+            select_query = f'SELECT * FROM "{table_name}" WHERE "{param}" = CAST(%s AS VARCHAR)'
         else:
-            select_query = f'SELECT * FROM {self.table_name} WHERE "{param}" = CAST(%s AS INTEGER)'
-        with self.conn.cursor(cursor_factory=DictCursor) as cursor:
-            cursor.execute(select_query, (value,))
-            records = cursor.fetchall()
-        records_list = [dict(record) for record in records]
-        return records_list
+            select_query = f'SELECT * FROM "{table_name}" WHERE "{param}" = CAST(%s AS INTEGER)'
 
-    def get_by_pattern_str(self, param: str, pattern: str) -> list:
-        select_query = f'SELECT * FROM {self.table_name} WHERE {param} ILIKE %s'
+        try:
+            self.cursor.execute(select_query, (value,))
+            records = self.cursor.fetchall()
+            records_list = [dict(record) for record in records]
+            return records_list
+        except Exception as e:
+            raise e
+        finally:
+            self.connection.rollback()
+
+    def get_by_pattern_str(self, table_name: str, param: str, pattern: str | int) -> list[dict]:
+        """
+        Выполняет выборку записей на основе шаблона. Поиск производится без учета регистра.
+
+        Args:
+            table_name: название таблицы
+            param: наименование столбца
+            pattern: шаблон
+
+        Returns:
+        Возвращает список с найдеными записями.
+        """
+
+        select_query = f'SELECT * FROM "{table_name}" WHERE {param} ILIKE %s'
         value = f'%{pattern}%'
-        with self.conn.cursor(cursor_factory=DictCursor) as cursor:
-            cursor.execute(select_query, (value,))
-            records = cursor.fetchall()
-        records_list = [dict(record) for record in records]
-        return records_list
+        try:
+            self.cursor.execute(select_query, (value,))
+            records = self.cursor.fetchall()
+            records_list = [dict(record) for record in records]
+            return records_list
+        except Exception as e:
+            raise e
+        finally:
+            self.connection.rollback()
 
-    def get_all(self) -> list:
+    def get_by_size(self, table_name: str, param: str, max_value: int | date, min_value: int | date) -> list:
         """
-        Выполняет выборку данных из таблицы. Может использоваться для выборки всех записей или записей.
-        """
-        select_query = f'SELECT * FROM {self.table_name}'
-        with self.conn.cursor(cursor_factory=DictCursor) as cursor:
-            cursor.execute(select_query)
-            records = cursor.fetchall()
-        records_list = [dict(record) for record in records]
-        return records_list  # Возвращается список кортежей
+        Выполняет выборку записей на основе вхождения значения в диапазон.
+        Указывается максимальное и минимальное значение. Поиск происходит с учетом граничных значений
+        В случае с датой необходимо передать объект типа date
 
-    def insert(self, **kwargs):  # Добавление нового кортежа
+        Args:
+            table_name: название таблицы
+            param: столбец
+            max_value: нижняя граница (Включительно)
+            min_value: верхняя граница (Включительно)
+
+        Returns:
+            Возвращает список совпавших кортежей
         """
-        Добавляет новую запись в таблицу. Аргументы передаются в виде именованных параметров, где ключи соответствуют именам столбцов.
-        Данные передаются следующим образом:
-        id = 1, name = 'John'...
+
+        select_query = f'SELECT * FROM "{table_name}" WHERE {param} BETWEEN %s AND %s'
+        max_value = f'%{max_value}%'
+        min_value = f'%{min_value}%'
+        try:
+            self.cursor.execute(select_query, (min_value, max_value))
+            records = self.cursor.fetchall()
+            records_list = [dict(record) for record in records]
+            return records_list
+        except Exception as e:
+            raise e
+        finally:
+            self.connection.rollback()
+
+    def get_all(self, table_name: str) -> list:
         """
+        Возвращает все записи из таблицы.
+        Args:
+            table_name: название атблицы
+
+        Returns:
+            Возвращает список со значениями
+        """
+
+        select_query = f'SELECT * FROM "{table_name}"'
+        try:
+            self.cursor.execute(select_query)
+            records = self.cursor.fetchall()
+            records_list = [dict(record) for record in records]
+            return records_list
+        except Exception as e:
+            raise e
+        finally:
+            self.connection.rollback()
+
+    def insert(self, table_name: str, **kwargs):  # Добавление нового кортежа
+        """
+        Добавляет запись в таблицу.
+        Если значение id является автозаполняемым, то оно может не указываться.
+        Args:
+            table_name: название таблицы
+            **kwargs: именованные значения столбцов
+
+        Returns:
+            Возвращает данные вставленной записи.
+        """
+
         keys = ', '.join(kwargs.keys())
         values = tuple(kwargs.values())
         placeholders = ', '.join(['%s'] * len(kwargs))
 
-        insert_query = (f"INSERT INTO {self.table_name} ({keys}) VALUES ({placeholders}) RETURNING id")
+        insert_query = f'INSERT INTO "{table_name}" ({keys}) VALUES ({placeholders}) RETURNING *'
         try:
-            with self.conn.cursor() as cursor:
-                cursor.execute(insert_query, values)
-                result = cursor.fetchone()[0]
-                self.conn.commit()
-                return result
+            self.cursor.execute(insert_query, values)
+            record = self.cursor.fetchone()
+            result = dict(record)
+            self.connection.commit()
+            return result
+        except UniqueViolation as e:
+            self.connection.rollback()
+            raise e
         except Exception as e:
-            print('insert error:', e)
-            self.conn.rollback()
-            return False
+            self.connection.rollback()
+            raise e
 
-    def delete_by_id(self, id: int):  # Удаление кортежа
+    def delete_by_id(self, table_name: str, id: int):  # Удаление кортежа
         """
-        Удаляет записи из таблицы, удовлетворяющие условию where.
-        Id: уникальный идентификатор (например, "id = 4")
+        Удаляет записи из таблицы по значению id.
+
+        Args:
+            table_name: название таблицы
+            id: id записи
+
+        Returns:
+            Возвращает данные удаленной записи
         """
-        delete_query = f"DELETE FROM {self.table_name} WHERE id = %s"
+
+        delete_query = f'DELETE FROM "{table_name}" WHERE id = %s RETURNING *'
 
         try:
-            with self.conn.cursor() as cursor:
-                cursor.execute(delete_query, (id,))
-                self.conn.commit()
-                return True
+            self.cursor.execute(delete_query, (id,))
+            record = self.cursor.fetchone()
+            result = dict(record)
+            self.connection.commit()
+            return result
         except Exception as e:
-            print(f'Delete error: {e}')
-            self.conn.rollback()
-            return False
+            self.connection.rollback()
+            raise e
 
-    def delete_by_param(self, param: str, value: int | str):
+    def delete_by_param(self, table_name: str, param: str, value: int | str):
         """
-        Удаляет записи из таблицы, удовлетворяющие условию where.
-        where: строка условия для удаления (например, "id = 4")
+        Удаляет записи из таблицы на основе значения столбца.
+
+        Args:
+            table_name: название таблицы
+            param: название столбца
+            value: значение для фильтрации
+
+        Returns:
+            Возвращает данные удаленной записи
         """
+
         if type(value) == int:
-            delete_query = (f"DELETE FROM {self.table_name} WHERE {param} = CAST(%s AS INTEGER)"
-                            f"RETURNING id")
+            delete_query = (f'DELETE FROM "{table_name}" WHERE {param} = CAST(%s AS INTEGER)'
+                            f'RETURNING *')
         else:
-            delete_query = (f"DELETE FROM {self.table_name} WHERE {param} = CAST(%s AS VARCHAR)"
-                            f"RETURNING id")
+            delete_query = (f'DELETE FROM "{table_name}" WHERE {param} = CAST(%s AS VARCHAR)'
+                            f'RETURNING *')
 
         try:
-            with self.conn.cursor() as cursor:
-                result = cursor.execute(delete_query, (value,))
-                self.conn.commit()
-                return result
+            self.cursor.execute(delete_query, (value,))
+            records = self.cursor.fetchall()
+            result = [dict(record) for record in records]
+            self.connection.commit()
+            return result
         except Exception as e:
-            print(f'Delete error: {e}')
-            self.conn.rollback()
-            return False
+            self.connection.rollback()
+            raise e
 
-    def update_record(self, id: int, updates: dict) -> bool:
+    def update_record(self, table_name: str, id: int, updates: dict) -> dict:
         """
-        Обновляет параметры записи в указанной таблице.
+        Обновляет запись в таблице.
 
-        id: идентификатор записи, которую нужно обновить.
-        updates: словарь с ключами, соответствующими названиям столбцов, и значениями, которые нужно установить.
+        Args:
+            table_name: название таблицы
+            id: уникальный идентификатор записи
+            updates: словарь с новыми данными записи
 
-        Возвращает True, если обновление успешно, иначе False.
+        Returns:
+            Возвращает словарь с данные вставленной записи
         """
+
         # Собираем части запроса для каждого ключа в словаре updates
         set_clause = ', '.join([f"{key} = %s" for key in updates.keys()])
         values = list(updates.values())
         values.append(id)  # добавляем id в конец списка параметров
 
-        query = f"UPDATE {self.table_name} SET {set_clause} WHERE id = %s"
+        query = f'UPDATE "{table_name}" SET {set_clause} WHERE id = %s RETURNING *'
+        self.cursor.execute(query, values)
         try:
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, values)
-                self.conn.commit()
-                return True
-        except Exception as e:
-            self.conn.rollback()
-            print(f'Update error: {e}')
-            return False
-
-    def search_in_table(self, columns, value):
-        """
-        Search for records in the table based on the given columns and value.
-
-        Args:
-            columns (list): List of columns to search in.
-            value (str): Value to search for.
-
-        Returns:
-            list: List of dictionaries representing the fetched records.
-        """
-        # Создаем строку условий поиска, используя параметризованные запросы
-        search_conditions = " OR ".join([f"{col}::text LIKE %s" for col in columns])
-        query = f"SELECT * FROM {self.table_name} WHERE {search_conditions};"
-
-        # Создаем список значений для параметров
-        query_params = [f"%{value}%"] * len(columns)
-
-        try:
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, query_params)
-                # Получаем описание столбцов
-                column_names = [desc[0] for desc in cursor.description]
-                # Преобразуем результат в список словарей
-                records = cursor.fetchall()
-                result = [dict(zip(column_names, record)) for record in records]
-                return result
-        except Exception as e:
-            self.conn.rollback()
-            raise e
+            record = self.cursor.fetchone()
+            result = dict(record)
+            self.connection.commit()
+            return result
+        except TypeError as e:
+            self.connection.rollback()
+            raise TypeError(f'Запись не обновлена, {e}')

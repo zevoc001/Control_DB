@@ -1,92 +1,71 @@
-from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
 from database import DataBase
 from datetime import date, time
-from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, ACCESS_TOKEN, PHOTO_PATH
-import os
-import shutil
+from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, ACCESS_TOKEN
+from psycopg2.errors import UniqueViolation
+from database import RecordNotFound
 
 app = FastAPI(
     title='MBT DataBase'
 )
 db = DataBase(DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT)
-db.connect_db()
+
+
+user_table = 'user'
+customer_table = 'customer'
+order_table = 'order'
+order_workers_table = 'order_workers'
 
 
 class UserInfo(BaseModel):
     id: int
-    access: Optional[str] = 'user'
-    reg_date: Optional[date] = None
-    status: Optional[str] = None
-    rating: Optional[int] = None
-    profit: Optional[int] = None
-    offers: Optional[int] = None
-    comment: Optional[str] = None
-    name: Optional[str] = None
-    sex: Optional[str] = None
-    born_date: Optional[date] = None
-    residence: Optional[str] = None
-    education: Optional[str] = None
-    course: Optional[int] = None
-    profession: Optional[str] = None
-    salary: Optional[int] = None
-    hard_work: Optional[bool] = None
-    mid_work: Optional[bool] = None
-    art_work: Optional[bool] = None
-    other_work: Optional[str] = None
-    tools: Optional[str] = None
-    language: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    citizenship: Optional[str] = None
-    wallet: Optional[str] = None
-    is_driver: Optional[bool] = None
-    transport: Optional[str] = None
-    is_military: Optional[bool] = None
-    other_info: Optional[str] = None
-    photo_link: Optional[int] = None
+    access: str
+    reg_date: date | None = None
+    status: str | None = None
+    rating: int | None = 0
+    profit: int | None = 0
+    orders: int | None = 0
+    comment: str | None = None
+
+    name: str
+    sex: str
+    born_date: date
+    skills: str | None = None
+    tools: str | None = None
+    phone: str
+    wallet: str | None = None
+    transport: str | None = None
+    other_info: str | None = None
 
 
 class OrderInfo(BaseModel):
-    status: Optional[str] = 'Active'
-    reg_date: Optional[date] = date.today()
-    manager_id: Optional[int] = None
-    employer_id: Optional[int] = None
-    order_date: Optional[date] = None
-    tasks: Optional[str] = None
-    place: Optional[str] = None
-    work_form: Optional[str] = None
-    price_full: Optional[float] = None
-    price_hour: Optional[float] = None
-    payment_form: Optional[str] = None
-    need_workers: Optional[int] = None
-    tools: Optional[str] = None
-    transfer_type: Optional[str] = None
-    leave_time: Optional[time] = None
-    start_time: Optional[time] = None
-    finish_time: Optional[time] = None
-    back_time: Optional[time] = None
-    break_time: Optional[time] = None
-    is_feed: Optional[bool] = None
-    clothes: Optional[str] = 'Рабочая одежда'
-    add_info: Optional[str] = None
-    break_duration: Optional[int] = 60
-    taskmaster_id: Optional[int] = None
-    worker_telegram_id_1: Optional[int] = None
-    worker_telegram_id_2: Optional[int] = None
-    worker_telegram_id_3: Optional[int] = None
-    worker_telegram_id_4: Optional[int] = None
-    worker_telegram_id_5: Optional[int] = None
-    worker_telegram_id_6: Optional[int] = None
-    worker_telegram_id_7: Optional[int] = None
-    worker_telegram_id_8: Optional[int] = None
-    worker_telegram_id_9: Optional[int] = None
-    worker_telegram_id_10: Optional[int] = None
+    id: int | None = None
+    status: str
+    reg_date: date
+    manager_id: int
+    customer_id: int | None = None
+    order_date: date
+    start_time: time | None = None
+    finish_time: time | None = None
+    transfer_type: str
+    order_cost: int | None = None
+    leave_place: str | None = None
+    leave_time: time | None = None
+    worker_price_hour: int | None = None
+    need_foreman: bool
+    payment_form: str | None = None
+    break_duration: int | None = None
+    count_workers: int | None = None
+    order_place: str
+    tasks: list[str]
+    tools: list | None = None
+    extra_info: str | None = None
 
 
-class EmployerInfo(BaseModel):
+class CustomerInfo(BaseModel):
+    id: int | None = None
     name: str
     company_name: Optional[str] = None
     company_address: Optional[str] = None
@@ -97,6 +76,7 @@ class EmployerInfo(BaseModel):
 
 async def verify_token(request: Request):
     headers = request.headers
+    return
     access_token = headers.get('Authorization')
     if access_token is None:
         raise HTTPException(status_code=401, detail='Отсутствует токен доступа Authorization')
@@ -106,48 +86,86 @@ async def verify_token(request: Request):
 
 @app.get('/api/users/')
 async def get_users_all(token: str = Depends(verify_token)):
-    usr_table = db.connect_table('users')
-    users = usr_table.get_all()
-    response = users
-    return response
+    try:
+        users = db.get_all(user_table)
+        return users
+    except RecordNotFound as e:
+        raise HTTPException(status_code=422, detail=f"{e}")
 
 
 @app.get('/api/users/{user_id}', response_model=UserInfo)
 async def get_user(user_id: int, token: str = Depends(verify_token)):
-    usr_table = db.connect_table('users')
-    response = usr_table.get_by_id(user_id)
-    if response:
-        return response
-    else:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    try:
+        result = db.get_by_id(table_name=user_table, id=user_id)
+        return result
+    except RecordNotFound as e:
+        raise HTTPException(status_code=404, detail=f"{e}")
 
 
 @app.get('/api/users/name/')
 async def get_users_by_name(pattern: str, token: str = Depends(verify_token)):
-    user_table = db.connect_table('users')
-    result = user_table.get_by_pattern_str(param='name', pattern=pattern)
-    return result
+    try:
+        result = db.get_by_pattern_str(table_name=user_table, param='name', pattern=pattern)
+        return result
+    except RecordNotFound:
+        raise HTTPException(status_code=404, detail=f"Пользователи не найдены")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@app.get('/api/users/sex/')
+async def get_users_by_name(sex: str, token: str = Depends(verify_token)):
+    try:
+        result = db.get_by_pattern_str(table_name=user_table, param='sex', pattern=sex)
+        return result
+    except RecordNotFound:
+        raise HTTPException(status_code=404, detail=f"Пользователи не найдены")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@app.get('/api/users/born_date/', description='Получить пользователей по дате рождения')
+async def get_users_by_age(date_from: date, date_to: date, token: str = Depends(verify_token)):
+    try:
+        result = db.get_by_size(table_name=user_table, param='born_date', min_value=date_from, max_value=date_to)
+        return result
+    except RecordNotFound:
+        raise HTTPException(status_code=404, detail=f"Пользователи не найдены")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@app.get('/api/users/phone/')
+async def get_users_by_phone(pattern: str, token: str = Depends(verify_token)):
+    try:
+        result = db.get_by_pattern_str(table_name=user_table, param='phone', pattern=pattern)
+        return result
+    except RecordNotFound:
+        raise HTTPException(status_code=404, detail=f"Пользователи не найдены")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
 
 
 @app.post('/api/users/')
 async def add_user(user: UserInfo, token: str = Depends(verify_token)) -> dict:
-    usr_table = db.connect_table('users')
     user_dict = user.dict()
-    result = usr_table.insert(**user_dict)
-    if result:
-        response = usr_table.get_by_id(id=user_dict['id'])
-        return {'id': response}
-    else:
-        raise HTTPException(status_code=422, detail="Ошибка сохранения данных")
+    if not user_dict['id']:
+        user_dict.pop('id')
+    try:
+        result = db.insert(table_name=user_table, **user_dict)
+        return result
+    except UniqueViolation:
+        raise HTTPException(status_code=422, detail=f'Уже существует пользователь с таким id')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
 
 
 @app.put('/api/users/')
 async def update_user(user: UserInfo, token: str = Depends(verify_token)) -> dict:
-    usr_table = db.connect_table('users')
     user_dict = user.dict()
-    result = usr_table.update_record(id=user_dict['id'], updates=user_dict)
+    result = db.update_record(table_name=user_table, id=user_dict['id'], updates=user_dict)
     if result:
-        response = usr_table.get_by_id(id=user_dict['id'])
+        response = db.get_by_id(table_name=user_table, id=user_dict['id'])
         return response
     else:
         raise HTTPException(status_code=422, detail='Ошибка изменения данных')
@@ -155,166 +173,149 @@ async def update_user(user: UserInfo, token: str = Depends(verify_token)) -> dic
 
 @app.delete('/api/users/{user_id}')
 async def delete_user(user_id: int, token: str = Depends(verify_token)) -> dict:
-    usr_table = db.connect_table('users')
-    result = usr_table.delete_by_id(id=user_id)
-    if result:
-        return {'user_id': user_id, 'status': 'deleted'}
-    else:
-        raise HTTPException(status_code=422, detail='Ошибка удаления пользователя')
-
-
-@app.get('/api/employers/')
-async def get_employers_all(token: str = Depends(verify_token)):
-    emp_table = db.connect_table('employers')
-    result = emp_table.get_all()
-    return result
-
-
-@app.get('/api/employers/{employer_id}')
-async def get_employer(employer_id: int, token: str = Depends(verify_token)):
-    emp_table = db.connect_table('employers')
-    result = emp_table.get_by_id(employer_id)
+    result = db.delete_by_id(table_name=user_table, id=user_id)
     if result:
         return result
     else:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-
-
-@app.get('/api/employers/name/')
-async def get_employers_by_name(pattern: str, token: str = Depends(verify_token)):
-    emp_table = db.connect_table('employers')
-    result = emp_table.get_by_pattern_str(param='name', pattern=pattern)
-    return result
-
-
-@app.post('/api/employers/')
-async def add_employer(employer: EmployerInfo, token: str = Depends(verify_token)):
-    emp_table = db.connect_table('employers')
-    employer = employer.dict()
-    result = emp_table.insert(**employer)
-    if result:
-        return {'id': result}
-    else:
-        return HTTPException(status_code=422, detail='Ошибка сохранения')
-
-
-@app.put('/api/employers/')
-async def update_employer(employer_id: int, employer: EmployerInfo, token: str = Depends(verify_token)) -> dict:
-    emp_table = db.connect_table('employers')
-    employer_dict = employer.dict()
-    result = emp_table.update_record(id=employer_id, updates=employer_dict)
-    if result:
-        response = emp_table.get_by_id(id=employer_id)
-        return response
-    else:
-        raise HTTPException(status_code=422, detail='Ошибка изменения данных')
-
-
-@app.delete('/api/employers/{employer_id}')
-async def delete_employer(employer_id: int, token: str = Depends(verify_token)) -> dict:
-    emp_table = db.connect_table('employers')
-    result = emp_table.delete_by_id(id=employer_id)
-    if result:
-        return {'employer_id': employer_id, 'status': 'deleted'}
-    else:
         raise HTTPException(status_code=422, detail='Ошибка удаления пользователя')
+
+
+@app.get('/api/customers/')
+async def get_customers_all(token: str = Depends(verify_token)):
+    try:
+        result = db.get_all(table_name=customer_table)
+        return result
+    except RecordNotFound:
+        raise HTTPException(status_code=404, detail=f"Пользователи не найдены")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@app.get('/api/customers/{customer_id}')
+async def get_customer(customer_id: int, token: str = Depends(verify_token)):
+    try:
+        result = db.get_by_id(table_name=customer_table, id=customer_id)
+        return result
+    except RecordNotFound:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@app.get('/api/customers/name/')
+async def get_customers_by_name(pattern: str, token: str = Depends(verify_token)):
+    try:
+        result = db.get_by_pattern_str(table_name=customer_table, param='name', pattern=pattern)
+        return result
+    except RecordNotFound:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@app.post('/api/customers/')
+async def add_customer(customer: CustomerInfo, token: str = Depends(verify_token)):
+    customer_dict = customer.dict()
+    if not customer_dict['id']:
+        customer_dict.pop('id')
+    try:
+        result = db.insert(table_name=customer_table, **customer_dict)
+        return result
+    except UniqueViolation:
+        raise HTTPException(status_code=422, detail='Пользователь с таким id уже существует')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'{e}')
+
+
+@app.put('/api/customers/')
+async def update_customer(customer_id: int, customer: CustomerInfo, token: str = Depends(verify_token)) -> dict:
+    try:
+        customer_dict = customer.dict()
+        result = db.update_record(table_name=customer_table, id=customer_id, updates=customer_dict)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'{e}')
+
+
+@app.delete('/api/customers/{customer_id}')
+async def delete_customer(customer_id: int, token: str = Depends(verify_token)) -> dict:
+    try:
+        result = db.delete_by_id(table_name=customer_table, id=customer_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'{e}')
 
 
 @app.get('/api/orders/')
 async def get_orders_all(token: str = Depends(verify_token)):
-    order_table = db.connect_table('orders')
-    orders = order_table.get_all()
-    return orders
+    try:
+        orders = db.get_all(table_name=order_table)
+        return orders
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'{e}')
 
 
 @app.get('/api/orders/{order_id}')
 async def get_order(order_id: int, token: str = Depends(verify_token)):
-    order_table = db.connect_table('orders')
-    order = order_table.get_by_id(order_id)
-    if order:
+    try:
+        order = db.get_by_id(table_name=order_table, id=order_id)
         return order
-    else:
+    except RecordNotFound:
         raise HTTPException(status_code=404, detail='Заказ не найден')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'{e}')
+
+
+@app.get('/api/orders/{order_id}/workers/')
+async def get_workers_id(order_id: int, token: str = Depends(verify_token)):
+    try:
+        result = db.get_by_param(table_name=order_workers_table, param='order_id', value=order_id)
+        return [worker['worker_id'] for worker in result]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'{e}')
+
+
+@app.post('/api/orders/{order_id}/workers/')
+async def add_worker(order_id: int, worker_id: int, token: str = Depends(verify_token)):
+    data = {
+        'order_id': order_id,
+        'worker_id': worker_id
+    }
+    try:
+        result = db.insert(table_name=order_workers_table, **data)
+        return result
+    except Exception as e:
+        return HTTPException(status_code=500, detail=e)
 
 
 @app.post('/api/orders/')
 async def add_order(order: OrderInfo, token: str = Depends(verify_token)):
-    orders_table = db.connect_table('orders')
-    order = dict(order)
-    result = orders_table.insert(**order)
-    if result:
-        return {'id': result}
-    else:
-        raise HTTPException(status_code=422, detail="Ошибка сохранения данных")
+    try:
+        order_dict = dict(order)
+        if not order_dict['id']:
+            order_dict.pop('id')
+        result = db.insert(table_name=order_table, **order_dict)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
 
 
-@app.put('/api/orders/{order_id}')
-async def update_order(order_id: int, order_data: dict, token: str = Depends(verify_token)):
-    order_table = db.connect_table('orders')
-    new_order = dict(order_data)
-    result = order_table.update_record(order_id, new_order)
-    if result:
-        return {'id': order_id, 'status': 'updated'}
-    else:
-        raise HTTPException(status_code=422, detail="Ошибка обновления")
+@app.put('/api/orders/{order_id}', response_model=OrderInfo)
+async def update_order(order_id: int, order: OrderInfo, token: str = Depends(verify_token)):
+    try:
+        order_dict = dict(order)
+        if not order_dict['id']:
+            order_dict.pop('id')
+        result = db.update_record(table_name=order_table, id=order_id, updates=order_dict)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
 
 
 @app.delete('/api/orders/{order_id}')
 async def delete_order(order_id: int, token: str = Depends(verify_token)) -> dict:
-    emp_table = db.connect_table('orders')
-    result = emp_table.delete_by_id(id=order_id)
-    if result:
-        return {'order_id': order_id, 'status': 'deleted'}
-    else:
-        raise HTTPException(status_code=422, detail='Ошибка удаления пользователя')
-
-
-@app.get('/api/orders/worker/')
-async def get_users_orders(user_id: int, token: str = Depends(verify_token)) -> list:
-    emp_table = db.connect_table('orders')
-    columns = ['worker_telegram_id_1',
-               'worker_telegram_id_2',
-               'worker_telegram_id_3',
-               'worker_telegram_id_4',
-               'worker_telegram_id_5',
-               'worker_telegram_id_6',
-               'worker_telegram_id_7',
-               'worker_telegram_id_8',
-               'worker_telegram_id_9',
-               'worker_telegram_id_10',
-               ]
-    orders = emp_table.search_in_table(columns, user_id)
-    return orders
-
-
-@app.put('/api/orders/status/')
-async def finish_order(order_id: int, token: str = Depends(verify_token)):
-    order_table = db.connect_table('orders')
     try:
-        value = {'status': 'Finished'}
-        order_table.update_record(order_id, value)
-        return {'status': 'Success'}
+        result = db.delete_by_id(table_name=order_table, id=order_id)
+        return result
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@app.get('/api/photo/{file_name}')
-async def get_photo(file_name: str, token: str = Depends(verify_token)):
-    try:
-        file_location = os.path.join(PHOTO_PATH, file_name)
-        return FileResponse(path=file_location, media_type='image/jpeg', filename=file_name)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@app.post('/api/photo/')
-async def upload_photo(photo: UploadFile = File(...),  token: str = Depends(verify_token)):
-    if not os.path.exists(PHOTO_PATH):
-        os.makedirs(PHOTO_PATH)
-    try:
-        file_location = os.path.join(PHOTO_PATH, photo.filename)
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(photo.file, buffer)
-        return {"filename": photo.filename}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f'{e}')

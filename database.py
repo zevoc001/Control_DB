@@ -67,6 +67,9 @@ class DataBase:
                                            cursor_factory=DictCursor)
         self.cursor = self.connection.cursor()
 
+    def disconnect(self):
+        self.connection.close()
+
     def get_by_id(self, table_name: str, id: int) -> dict:
         """
         Выполняет выборку данных из таблицы.
